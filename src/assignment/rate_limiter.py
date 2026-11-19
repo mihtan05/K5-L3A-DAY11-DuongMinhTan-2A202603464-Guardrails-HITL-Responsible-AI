@@ -1,5 +1,5 @@
 """
-Assignment 11 — Rate Limiter starter (TODO).
+Assignment 11 — Rate Limiter (implemented).
 
 Sliding-window, per-user rate limiting. Blocks abuse that other
 guardrail layers do not address (flooding / cost attacks).

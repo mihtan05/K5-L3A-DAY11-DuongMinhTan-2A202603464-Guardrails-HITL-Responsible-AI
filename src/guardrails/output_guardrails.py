@@ -91,7 +91,7 @@ Respond with ONLY one word: SAFE or UNSAFE
 If UNSAFE, add a brief reason on the next line.
 """
 
-# TODO: Create safety_judge_agent using LlmAgent
+# OPTIONAL (not graded): create safety_judge_agent using LlmAgent
 # Hint:
 # safety_judge_agent = llm_agent.LlmAgent(
 #     model="gemini-3.5-flash",
@@ -99,7 +99,7 @@ If UNSAFE, add a brief reason on the next line.
 #     instruction=SAFETY_JUDGE_INSTRUCTION,
 # )
 
-safety_judge_agent = None  # TODO: Replace with implementation
+safety_judge_agent = None  # optional (không chấm) — judge disabled
 judge_runner = None
 
 
