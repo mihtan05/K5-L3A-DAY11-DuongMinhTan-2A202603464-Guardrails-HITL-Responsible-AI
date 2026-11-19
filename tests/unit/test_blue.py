@@ -87,3 +87,43 @@ def test_output_plugin_redacts():
     out = asyncio.run(p.after_model_callback(callback_context=None, llm_response=resp))
     assert "sk-vinbank" not in out.content.parts[0].text
     assert p.redacted_count == 1
+
+
+import json  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from assignment.audit_log import AuditLogPlugin  # noqa: E402
+from assignment.monitoring import MonitoringAlert  # noqa: E402
+from assignment.rate_limiter import RateLimitPlugin  # noqa: E402
+
+
+def test_rate_limiter_sliding_window():
+    rl = RateLimitPlugin(max_requests=3, window_seconds=60)
+    ctx = SimpleNamespace(user_id="u1")
+    res = [
+        asyncio.run(rl.on_user_message_callback(invocation_context=ctx, user_message=_msg("hi")))
+        for _ in range(5)
+    ]
+    assert [r is None for r in res] == [True, True, True, False, False]
+    assert "Rate limit" in res[3].parts[0].text and rl.blocked_count == 2
+    other = asyncio.run(rl.on_user_message_callback(
+        invocation_context=SimpleNamespace(user_id="u2"), user_message=_msg("hi")))
+    assert other is None  # per-user window
+
+
+def test_audit_log_roundtrip(tmp_path):
+    a = AuditLogPlugin()
+    a.record_input(user_id="u", text="q", request_id="r1")
+    a.record_output(user_id="u", text="ans", blocked=True, layer="input_guardrail", request_id="r1")
+    path = a.export_json(str(tmp_path / "audit.json"))
+    row = json.loads(Path(path).read_text(encoding="utf-8"))[0]
+    assert row["input"] == "q" and row["blocked"] is True
+    assert row["layer"] == "input_guardrail" and row["latency_ms"] >= 0
+
+
+def test_monitoring_alerts(tmp_path):
+    m = MonitoringAlert(total_requests=10, blocked_requests=6, rate_limit_hits=5)
+    metrics = {a.metric for a in m.check_metrics()}
+    assert {"block_rate", "rate_limit_hits"} <= metrics
+    data = json.loads(Path(m.export_json(str(tmp_path / "m.json"))).read_text(encoding="utf-8"))
+    assert data["total_requests"] == 10 and len(data["alerts"]) >= 2
