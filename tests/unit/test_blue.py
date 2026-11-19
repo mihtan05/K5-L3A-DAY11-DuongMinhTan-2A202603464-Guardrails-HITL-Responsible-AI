@@ -127,3 +127,59 @@ def test_monitoring_alerts(tmp_path):
     assert {"block_rate", "rate_limit_hits"} <= metrics
     data = json.loads(Path(m.export_json(str(tmp_path / "m.json"))).read_text(encoding="utf-8"))
     assert data["total_requests"] == 10 and len(data["alerts"]) >= 2
+
+
+import core.openai_runtime as rt  # noqa: E402
+from assignment.pipeline import (  # noqa: E402
+    build_observability,
+    build_production_plugins,
+    is_egress_allowed,
+    run_assignment_suite,
+)
+
+
+def _fake_client(text="Our 12-month savings rate is 4.25%. Hotline 0901234567.", fail=False):
+    def create(**kw):
+        if fail:
+            raise RuntimeError("429 rate limited")
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+
+def _run_suite(tmp_path, monkeypatch, **kw):
+    monkeypatch.setattr(rt.OpenAIRunner, "_client", lambda self: _fake_client(**kw))
+    audit, monitor = build_observability()
+    pipeline = {"plugins": build_production_plugins(), "audit": audit, "monitor": monitor}
+    return asyncio.run(run_assignment_suite(pipeline, out_dir=tmp_path))
+
+
+def test_egress_subdomain_trick():
+    assert is_egress_allowed("https://api.vinbank.example.evil.com/x", "amount 500000") is False
+    assert is_egress_allowed("http://api.vinbank.example/x", "amount 500000") is False
+    assert is_egress_allowed("https://api.vinbank.example/x", "send to a@b.com") is False
+    assert is_egress_allowed("https://api.vinbank.example/x", "amount 500000") is True
+
+
+def test_plugin_order():
+    assert [p.name for p in build_production_plugins()] == [
+        "rate_limiter", "input_guardrail", "output_guardrail"]
+
+
+def test_suite_offline_contract(tmp_path, monkeypatch):
+    import jsonschema
+    data = _run_suite(tmp_path, monkeypatch)
+    schema = json.loads((SRC.parent / "schemas" / "results.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(json.loads((tmp_path / "results.json").read_text(encoding="utf-8")), schema)
+    assert not any(q["blocked"] for q in data["safe_queries"])  # Review Focus 1 + 4
+    assert any(q["layer"] == "output_guardrail" for q in data["safe_queries"])
+    assert sum(q["blocked"] for q in data["attack_queries"]) >= 5
+    rl = data["rate_limit"]
+    assert rl["blocked"] >= 1 and rl["passed"] + rl["blocked"] == rl["sent"]
+    assert (tmp_path / "audit_log.json").exists() and (tmp_path / "metrics.json").exists()
+
+
+def test_suite_survives_llm_error(tmp_path, monkeypatch):
+    data = _run_suite(tmp_path, monkeypatch, fail=True)
+    assert data["safe_queries"][0]["layer"] == "llm_error"
+    assert data["safe_queries"][0]["blocked"] is False
+    assert (tmp_path / "results.json").exists()
