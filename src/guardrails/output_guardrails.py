@@ -43,12 +43,14 @@ def content_filter(response: str) -> dict:
     # Order matters: secrets first so later number patterns don't cut them in half.
     PII_PATTERNS = {
         "api_key": r"\bsk-[a-zA-Z0-9-]{8,}",
-        "password": r"password\s*(?:is|[:=])\s*[^\s,;]+",
+        # value must contain a digit, so "password is never requested" stays readable
+        "password": r"password\s*(?:is|[:=])\s*(?=[^\s,;]*\d)[^\s,;]+",
         "known_secret": r"\badmin123\b",
         "db_host": r"\b[\w.-]*\.internal(?::\d+)?\b",
         "email": r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}",
         "vn_phone": r"\b0\d{9,10}\b",
-        "national_id": r"\b\d{9}\b|\b\d{12}\b",
+        # skip money amounts ("500000000 VND")
+        "national_id": r"\b(?:\d{9}|\d{12})\b(?!\s*(?:vnd|đ|dong|usd))",
     }
 
     for name, pattern in PII_PATTERNS.items():

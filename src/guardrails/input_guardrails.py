@@ -116,7 +116,8 @@ def topic_filter(user_input: str) -> InputStatus:
     # leading boundary only: "skills" does not trip "kill", but "hacking"/"drugs" still do
     if any(re.search(rf"\b{re.escape(t)}", s) for t in BLOCKED_TOPICS):
         return "BLOCK"
-    if any(t in s for t in ALLOWED_TOPICS + EXTRA_ALLOWED_TOPICS):
+    # whole word (+ plural) so "interesting"/"treatment" don't count as banking
+    if any(re.search(rf"\b{re.escape(t)}(?:s|es)?\b", s) for t in ALLOWED_TOPICS + EXTRA_ALLOWED_TOPICS):
         return "ALLOW"
     return "BLOCK"
 

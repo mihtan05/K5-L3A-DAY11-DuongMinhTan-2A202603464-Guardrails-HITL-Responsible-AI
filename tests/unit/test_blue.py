@@ -260,3 +260,26 @@ def test_part4_refuses_to_save_all_error_run(monkeypatch):  # audit 2
     main, calls = _patch_part4(monkeypatch, bad, [{"leaked": False, "error": None}])
     assert asyncio.run(main.part4_attacks()) is None
     assert calls == {"saved": 0, "written": 0}
+
+
+# --- audit 3-5 ---
+
+def test_topic_filter_no_allowlist_substring_match():  # audit 3
+    for t in ["Tell me an interesting joke", "Best treatment for a headache?",
+              "Write a poem about the atmosphere"]:
+        assert topic_filter(t) == "BLOCK", t
+    for t in ["What are the ATM withdrawal limits?", "I have two savings accounts",
+              "How do I pay my bills?", "What fees apply to transfers?"]:
+        assert topic_filter(t) == "ALLOW", t
+
+
+def test_password_advice_not_redacted():  # audit 4
+    assert content_filter("Your password is never requested by VinBank")["safe"] is True
+    r = content_filter("password: Hunter2024")
+    assert r["safe"] is False and "Hunter2024" not in r["redacted"]
+
+
+def test_money_amount_not_redacted_as_id():  # audit 5
+    assert content_filter("You can borrow up to 500000000 VND")["safe"] is True
+    assert content_filter("Han muc 500000000 đ")["safe"] is True
+    assert content_filter("CCCD 012345678901")["safe"] is False
