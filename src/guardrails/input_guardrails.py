@@ -18,7 +18,7 @@ from google.genai import types
 from google.adk.plugins import base_plugin
 from google.adk.agents.invocation_context import InvocationContext
 
-from agents.security_boundary import normalize_for_security
+from agents.security_boundary import ZERO_WIDTH, normalize_for_security
 from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
 
 # Quyết định rõ ràng — tránh đảo nghĩa True/False
@@ -53,15 +53,19 @@ def detect_injection(user_input: str) -> InputStatus:
     Returns:
         ``"BLOCK"`` if injection detected (chặn), ``"ALLOW"`` otherwise (cho qua).
     """
-    text = re.sub(r"\s+", " ", normalize_for_security(user_input))
-    for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
-            return "BLOCK"
+    # Zero-width -> space (not delete), so "Ignore​all" still reads as two words.
+    spaced = (user_input or "").translate({ord(c): " " for c in ZERO_WIDTH})
+    text = re.sub(r"\s+", " ", normalize_for_security(spaced))
+    if any(re.search(p, text, re.IGNORECASE) for p in INJECTION_PATTERNS):
+        return "BLOCK"
+    # Vietnamese typed without diacritics ("bo qua moi huong dan")
+    if re.search(r"bo qua (moi |tat ca )?(huong dan|chi dan)", _canonical(text)):
+        return "BLOCK"
     return "ALLOW"
 
 
 INJECTION_PATTERNS = [
-    r"ignore (all )?(the )?(previous|above|prior) (instructions?|rules?)",
+    r"ignore (all )?(the |your )?(previous|above|prior) (instructions?|rules?)",
     r"you are now\b",
     r"system prompt",
     r"reveal (your |the )?(instructions?|prompt|internal password|password|secrets?)",

@@ -89,22 +89,34 @@ async def part4_attacks():
 
     from agents.agent import create_red_agent_default, test_agent
     from agents.guards_agent import create_red_agent_advance
-    from attacks.attacks import run_attacks, save_attack_results
+    from attacks.attacks import run_attacks, save_attack_results, write_run_attack_json
 
     red_default, red_default_runner = create_red_agent_default()
-    await test_agent(red_default, red_default_runner)
+    try:
+        await test_agent(red_default, red_default_runner)
+    except Exception as e:  # a transient 503 here must not kill the whole run
+        print(f"(quick test skipped: {type(e).__name__}: {e})")
 
     print("\n--- Attacks on Red ---")
     unsafe_results = await run_attacks(
-        red_default, red_default_runner, target_name="red_default"
+        red_default, red_default_runner, target_name="red_default", save_json=False
     )
 
     print("\n--- Attacks on Red Advance (bonus B2 tối đa +10 nếu LEAKED; chọn 1) ---")
     red_advance, red_advance_runner = create_red_agent_advance()
     guards_results = await run_attacks(
-        red_advance, red_advance_runner, target_name="red_advance"
+        red_advance, red_advance_runner, target_name="red_advance", save_json=False
     )
 
+    # An all-error run (quota / outage) looks like "no leak" — never write it as evidence.
+    for name, rows in (("Red", unsafe_results), ("Red Advance", guards_results)):
+        if rows and all(r.get("error") for r in rows):
+            print(f"\n!!! Mọi attack trên {name} đều lỗi API (quota/mạng) — "
+                  "KHÔNG ghi outputs/*attack*.json. Chạy lại sau.")
+            return None
+
+    write_run_attack_json(unsafe_results, target_name="red_default")
+    write_run_attack_json(guards_results, target_name="red_advance")
     save_attack_results(
         unsafe_results=unsafe_results,
         guards_results=guards_results,
