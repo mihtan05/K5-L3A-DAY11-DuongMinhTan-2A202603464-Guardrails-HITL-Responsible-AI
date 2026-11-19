@@ -42,7 +42,7 @@ def content_filter(response: str) -> dict:
     # PII patterns to check
     # Order matters: secrets first so later number patterns don't cut them in half.
     PII_PATTERNS = {
-        "api_key": r"sk-[a-zA-Z0-9-]+",
+        "api_key": r"\bsk-[a-zA-Z0-9-]{8,}",
         "password": r"password\s*(?:is|[:=])\s*[^\s,;]+",
         "known_secret": r"\badmin123\b",
         "db_host": r"\b[\w.-]*\.internal(?::\d+)?\b",

@@ -73,6 +73,14 @@ INJECTION_PATTERNS = [
 ]
 
 
+# Common banking words missing from the starter list (canonical form, no diacritics).
+# Never add a bare "the": "thẻ" canonicalises to it and would allow everything.
+EXTRA_ALLOWED_TOPICS = [
+    "card", "debit", "mortgage", "bill", "exchange rate", "fee",
+    "chuyen khoan", "khoa the", "the ghi no",
+]
+
+
 def _canonical(text: str) -> str:
     """Lowercase, strip invisible chars and Vietnamese diacritics (lãi suất -> lai suat)."""
     s = unicodedata.normalize("NFKD", normalize_for_security(text).lower())
@@ -101,10 +109,10 @@ def topic_filter(user_input: str) -> InputStatus:
         ``"ALLOW"`` = cho qua (câu banking hợp lệ).
     """
     s = _canonical(user_input)
-    # word boundary so "skills" does not trip "kill"
-    if any(re.search(rf"\b{re.escape(t)}\b", s) for t in BLOCKED_TOPICS):
+    # leading boundary only: "skills" does not trip "kill", but "hacking"/"drugs" still do
+    if any(re.search(rf"\b{re.escape(t)}", s) for t in BLOCKED_TOPICS):
         return "BLOCK"
-    if any(t in s for t in ALLOWED_TOPICS):
+    if any(t in s for t in ALLOWED_TOPICS + EXTRA_ALLOWED_TOPICS):
         return "ALLOW"
     return "BLOCK"
 

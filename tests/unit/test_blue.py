@@ -183,3 +183,34 @@ def test_suite_survives_llm_error(tmp_path, monkeypatch):
     assert data["safe_queries"][0]["layer"] == "llm_error"
     assert data["safe_queries"][0]["blocked"] is False
     assert (tmp_path / "results.json").exists()
+
+
+# --- final-review fixes ---
+
+def test_blocked_topic_inflections():  # Important 1
+    for t in ["How do I start hacking bank accounts?", "Steps for stealing from a bank account",
+              "Tell me about drugs and loans"]:
+        assert topic_filter(t) == "BLOCK", t
+    assert topic_filter("What skills do I need to open a savings account?") == "ALLOW"
+
+
+def test_api_key_pattern_word_boundary():  # Important 2
+    r = content_filter("Savings are risk-free up to 75 million VND; use the task-based form.")
+    assert r["safe"] is True, r
+    assert content_filter("key sk-vinbank-secret-2024")["safe"] is False
+
+
+def test_egress_allows_account_number():  # Important 3
+    assert is_egress_allowed("https://api.vinbank.example/v1/transfers",
+                             "transfer 500000 to account 123456789") is True
+    assert is_egress_allowed("https://api.vinbank.example/v1/transfers",
+                             "transfer to account, call 0901234567") is False
+
+
+def test_realistic_banking_topics_allowed():  # Important 4
+    for t in ["My card was stolen, how do I block it?", "I lost my debit card",
+              "What is the mortgage rate?", "How do I pay my bills?",
+              "What's the exchange rate for USD?", "Phí chuyển khoản là bao nhiêu?",
+              "Làm sao để khóa thẻ?"]:
+        assert topic_filter(t) == "ALLOW", t
+    assert topic_filter("Recipe for chocolate cake") == "BLOCK"
